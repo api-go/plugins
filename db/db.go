@@ -1,7 +1,8 @@
 package db
 
 import (
-	"github.com/api0-work/plugin"
+	"fmt"
+	"github.com/api-go/plugin"
 	"github.com/ssgo/db"
 	"github.com/ssgo/log"
 	"github.com/ssgo/u"
@@ -20,7 +21,7 @@ var defaultDB *db.DB
 
 func init() {
 	plugin.Register(plugin.Plugin{
-		Id:   "github.com/api0-work/plugins/db",
+		Id:   "github.com/api-go/plugins/db",
 		Name: "db",
 		ConfigSet: []plugin.ConfigSet{
 			{Name: "default", Type: "string", Memo: "默认的DB连接，使用 db.get() 来获得实例，格式为 db://127.0.0.1:3306/1 或 db://root:<**加密的密码**>@127.0.0.1:3306?maxIdles=0&maxLifeTime=0&maxOpens=0&logSlow=1s"},
@@ -92,6 +93,48 @@ func (db *DB) Query(requestSql string, args ...interface{}) ([]map[string]interf
 	return r.MapResults(), r.Error
 }
 
+// Query1 查询
+// Query1 return 返回查询到的第一行数据，对象格式
+func (db *DB) Query1(requestSql string, args ...interface{}) (map[string]interface{}, error) {
+	r := db.pool.Query(requestSql, args...)
+	results := r.MapResults()
+	if len(results) > 0 {
+		return results[0], r.Error
+	} else {
+		return map[string]interface{}{}, r.Error
+	}
+}
+
+// Query11 查询
+// Query11 return 返回查询到的第一行第一列数据，字段类型对应的格式
+func (db *DB) Query11(requestSql string, args ...interface{}) (interface{}, error) {
+	r := db.pool.Query(requestSql, args...)
+	results := r.SliceResults()
+	if len(results) > 0 {
+		if len(results[0]) > 0 {
+			return results[0][0], r.Error
+		} else {
+			return nil, r.Error
+		}
+	} else {
+		return nil, r.Error
+	}
+}
+
+// Query1a 查询
+// Query1a return 返回查询到的第一列数据，数组格式
+func (db *DB) Query1a(requestSql string, args ...interface{}) ([]interface{}, error) {
+	r := db.pool.Query(requestSql, args...)
+	results := r.SliceResults()
+	a := make([]interface{}, 0)
+	for _, row := range results {
+		if len(results[0]) > 0 {
+			a = append(a, row[0])
+		}
+	}
+	return a, r.Error
+}
+
 // Insert 插入数据
 // * table 表名
 // * data 数据对象（Key-Value格式）
@@ -131,6 +174,38 @@ func (db *DB) Delete(table string, wheres string, args ...interface{}) (int64, e
 	return r.Changes(), r.Error
 }
 
+// MakeId 生成指定字段不唯一的ID
+// MakeId idField ID字段
+// MakeId idSize ID长度
+// MakeId return 新的ID
+func (db *DB) MakeId(table string, idField string, idSize uint) (string, error) {
+	var id string
+	var err error
+	for i:=0; i<100; i++ {
+		if idSize > 20 {
+			id = u.UniqueId()
+		} else if idSize > 14 {
+			id = u.UniqueId()[0:idSize]
+		} else if idSize > 12 {
+			id = u.ShortUniqueId()[0:idSize]
+		} else if idSize > 10 {
+			id = u.Id12()[0:idSize]
+		} else if idSize > 8 {
+			id = u.Id10()[0:idSize]
+		} else if idSize >= 6 {
+			id = u.Id8()[0:idSize]
+		} else {
+			id = u.Id6()
+		}
+		r := db.pool.Query(fmt.Sprintf("SELECT COUNT(*) FROM `%s` WHERE `%s`=?", table, idField), id)
+		err = r.Error
+		if r.IntOnR1C1() == 0 {
+			break
+		}
+	}
+	return id, err
+}
+
 // Commit 提交事务
 func (tx *Tx) Commit() error {
 	return tx.conn.Commit()
@@ -160,6 +235,42 @@ func (tx *Tx) Exec(requestSql string, args ...interface{}) (int64, error) {
 func (tx *Tx) Query(requestSql string, args ...interface{}) ([]map[string]interface{}, error) {
 	r := tx.conn.Query(requestSql, args...)
 	return r.MapResults(), r.Error
+}
+
+func (tx *Tx) Query1(requestSql string, args ...interface{}) (map[string]interface{}, error) {
+	r := tx.conn.Query(requestSql, args...)
+	results := r.MapResults()
+	if len(results) > 0 {
+		return results[0], r.Error
+	} else {
+		return map[string]interface{}{}, r.Error
+	}
+}
+
+func (tx *Tx) Query11(requestSql string, args ...interface{}) (interface{}, error) {
+	r := tx.conn.Query(requestSql, args...)
+	results := r.SliceResults()
+	if len(results) > 0 {
+		if len(results[0]) > 0 {
+			return results[0][0], r.Error
+		} else {
+			return nil, r.Error
+		}
+	} else {
+		return nil, r.Error
+	}
+}
+
+func (tx *Tx) Query1a(requestSql string, args ...interface{}) ([]interface{}, error) {
+	r := tx.conn.Query(requestSql, args...)
+	results := r.SliceResults()
+	a := make([]interface{}, 0)
+	for _, row := range results {
+		if len(results[0]) > 0 {
+			a = append(a, row[0])
+		}
+	}
+	return a, r.Error
 }
 
 func (tx *Tx) Insert(table string, data map[string]interface{}) (int64, error) {

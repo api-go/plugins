@@ -1,7 +1,7 @@
 package discover
 
 import (
-	"github.com/api0-work/plugin"
+	"github.com/api-go/plugin"
 	"github.com/ssgo/discover"
 	"github.com/ssgo/httpclient"
 	"github.com/ssgo/log"
@@ -20,7 +20,7 @@ type DiscoverApp struct {
 
 func init() {
 	plugin.Register(plugin.Plugin{
-		Id:   "github.com/api0-work/plugins/discover",
+		Id:   "github.com/api-go/plugins/discover",
 		Name: "discover",
 		Objects: map[string]interface{}{
 			"fetch": GetDiscoverApp,
@@ -71,8 +71,8 @@ func (dApp *DiscoverApp) Delete(path string, data *map[string]interface{}, heade
 }
 
 // Head 发送HEAD请求
-func (dApp *DiscoverApp) Head(path string, data *map[string]interface{}, headers *map[string]string) (map[string]interface{}, error) {
-	return makeResult(dApp.logger, dApp.caller.Head(dApp.app, fixHTTPPath(path), data, dApp.makeHeaderArray(headers)...))
+func (dApp *DiscoverApp) Head(path string, headers *map[string]string) (map[string]interface{}, error) {
+	return makeResult(dApp.logger, dApp.caller.Head(dApp.app, fixHTTPPath(path), dApp.makeHeaderArray(headers)...))
 }
 
 func (dApp *DiscoverApp) makeHeaderArray(in *map[string]string) []string {

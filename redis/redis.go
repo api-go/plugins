@@ -3,7 +3,7 @@ package redis
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/api0-work/plugin"
+	"github.com/api-go/plugin"
 	"github.com/ssgo/log"
 	"github.com/ssgo/redis"
 	"github.com/ssgo/u"
@@ -18,7 +18,7 @@ var defaultRedis *redis.Redis
 
 func init() {
 	plugin.Register(plugin.Plugin{
-		Id:   "github.com/api0-work/plugins/redis",
+		Id:   "github.com/api-go/plugins/redis",
 		Name: "redis",
 		ConfigSet: []plugin.ConfigSet{
 			{Name: "default", Type: "string", Memo: "默认的Redis连接，使用 redis.get() 来获得实例，格式为 redis://127.0.0.1:6379/1 或 redis://:<**加密的密码**>@127.0.0.1:6379?timeout=10s&logSlow=100ms"},

@@ -1,14 +1,14 @@
 package runtime
 
 import (
-	"github.com/api0-work/plugin"
+	"github.com/api-go/plugin"
 	"runtime"
 	"time"
 )
 
 func init() {
 	plugin.Register(plugin.Plugin{
-		Id:   "api0/runtime",
+		Id:   "github.com/api-go/plugins/runtime",
 		Name: "runtime",
 		Objects: map[string]interface{}{
 			// sleep 程序等待指定时间

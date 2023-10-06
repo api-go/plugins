@@ -3,7 +3,7 @@ package file
 import (
 	"bufio"
 	"errors"
-	"github.com/api0-work/plugin"
+	"github.com/api-go/plugin"
 	"github.com/ssgo/u"
 	"os"
 	"strings"
@@ -25,7 +25,7 @@ type File struct {
 
 func init() {
 	plugin.Register(plugin.Plugin{
-		Id:   "github.com/api0-work/plugins/file",
+		Id:   "github.com/api-go/plugins/file",
 		Name: "file",
 		ConfigSet: []plugin.ConfigSet{
 			{Name: "allowPaths", Type: "[]string", Memo: "允许操作的文件路径"},

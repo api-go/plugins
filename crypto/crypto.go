@@ -8,22 +8,35 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"github.com/ZZMarquis/gm/sm3"
-	"github.com/api0-work/plugin"
-	"github.com/api0-work/plugins/crypto/crypt"
-	"github.com/ssgo/s"
+	"github.com/api-go/plugin"
+	"github.com/api-go/plugins/crypto/crypt"
 	"hash"
+	"sync"
 )
 
-var gmCrypto = crypt.GMCrypt{}
-var cmCrypto = crypt.CMCrypt{}
+var gmCrypto = &crypt.GMCrypt{}
+var cmCrypto = &crypt.CMCrypt{}
+var defaultCrypto crypt.Crypt
+var defaultCryptoLock = sync.RWMutex{}
 
 func init() {
 	plugin.Register(plugin.Plugin{
-		Id:   "github.com/api0-work/plugins/crypto",
+		Id:   "github.com/api-go/plugins/crypto",
 		Name: "crypto",
-		Objects: s.Map{
+		ConfigSet: []plugin.ConfigSet{
+			{Name: "mode", Type: "string", Memo: "指定默认算法集，cm-通用算法（SHA256、AES、ECDSA），gm-国密算法（sm3、sm4、sm2）"},
+		},
+		Init: func(conf map[string]interface{}) {
+			defaultCryptoLock.Lock()
+			if conf["mode"] == "gm" {
+				defaultCrypto = &crypt.CMCrypt{}
+			} else {
+				defaultCrypto = &crypt.GMCrypt{}
+			}
+			defaultCryptoLock.Unlock()
+		}, Objects: map[string]interface{}{
 			// base64 Base64编码
-			"base64": s.Map{
+			"base64": map[string]interface{}{
 				// encode 将字符串编码
 				// encode data 用于编码的数据，string类型
 				// encode return 编码后的结果
@@ -50,7 +63,7 @@ func init() {
 				},
 			},
 			// urlBase64 Base64编码（兼容URL）
-			"urlBase64": s.Map{
+			"urlBase64": map[string]interface{}{
 				"encode": func(data string) string {
 					return base64.URLEncoding.EncodeToString([]byte(data))
 				},
@@ -65,7 +78,7 @@ func init() {
 				},
 			},
 			// hex hex编码
-			"hex": s.Map{
+			"hex": map[string]interface{}{
 				"encode": func(data string) string {
 					return hex.EncodeToString([]byte(data))
 				},
@@ -79,6 +92,11 @@ func init() {
 					return hex.DecodeString(data)
 				},
 			},
+			// newMD5 创建MD5对象
+			// newMD5 return MD5对象
+			"newMD5": func() *Hash {
+				return &Hash{hash: md5.New()}
+			},
 			// md5 将字符串进行MD5编码
 			// md5 data 用于编码的数据，string类型
 			// md5 return 编码后的结果，16进制字符串
@@ -90,6 +108,12 @@ func init() {
 			// md5 return 编码后的结果，二进制的字节数组，如果需要转换为字符串可以使用hex.encode或者base64.encode等编码工具进行编码
 			"md5Bytes": func(data []byte) []byte {
 				return makeHash(md5.New(), data)
+			},
+
+			// newSHA1 创建SHA1对象
+			// newSHA1 return SHA1对象
+			"newSHA1": func() *Hash {
+				return &Hash{hash: sha1.New()}
 			},
 			// sha1 将字符串进行SHA1编码
 			// sha1 data 用于编码的数据，string类型
@@ -103,6 +127,11 @@ func init() {
 			"sha1Bytes": func(data []byte) []byte {
 				return makeHash(sha1.New(), data)
 			},
+			// newSHA256 创建SHA256对象
+			// newSHA256 return SHA256对象
+			"newSHA256": func() *Hash {
+				return &Hash{hash: sha256.New()}
+			},
 			// sha256 将字符串进行SHA256编码
 			// sha256 data 用于编码的数据，string类型
 			// sha256 return 编码后的结果，16进制字符串
@@ -114,6 +143,11 @@ func init() {
 			// sha256Bytes return 编码后的结果，二进制的字节数组，如果需要转换为字符串可以使用hex.encode或者base64.encode等编码工具进行编码
 			"sha256Bytes": func(data []byte) []byte {
 				return makeHash(sha256.New(), data)
+			},
+			// newSHA512 创建SHA512对象
+			// newSHA512 return SHA512对象
+			"newSHA512": func() *Hash {
+				return &Hash{hash: sha512.New()}
 			},
 			// sha512 将字符串进行SHA512编码
 			// sha512 data 用于编码的数据，string类型
@@ -127,6 +161,11 @@ func init() {
 			"sha512Bytes": func(data []byte) []byte {
 				return makeHash(sha512.New(), data)
 			},
+			// newSM3 创建SM3对象
+			// newSM3 return SM3对象
+			"newSM3": func() *Hash {
+				return &Hash{hash: sm3.New()}
+			},
 			// sm3 将字符串进行SM3编码
 			// sm3 data 用于编码的数据，string类型
 			// sm3 return 编码后的结果，16进制字符串
@@ -139,16 +178,77 @@ func init() {
 			"sm3Bytes": func(data []byte) []byte {
 				return makeHash(sm3.New(), data)
 			},
+			// newHash 创建Hash对象（根据配置使用SHA256或SM3，默认为SHA256）
+			// newHash return Hash对象
+			"newHash": func() *Hash {
+				return &Hash{hash: defaultCrypto.NewHash()}
+			},
+			// hash 将字符串进行Hash编码（根据配置使用SHA256或SM3，默认为SHA256）
+			// hash data 用于编码的数据，string类型
+			// hash return 编码后的结果，16进制字符串
+			"hash": func(data string) string {
+				return hex.EncodeToString(makeHash(defaultCrypto.NewHash(), []byte(data)))
+			},
+			// hashBytes 将二进制数据进行Hash编码（根据配置使用SHA256或SM3，默认为SHA256）
+			// hashBytes data 用于编码的数据，用于编码的数据，二进制的字节数组
+			// hashBytes return 编码后的结果，二进制的字节数组，如果需要转换为字符串可以使用hex.encode或者base64.encode等编码工具进行编码
+			"hashBytes": func(data []byte) []byte {
+				return makeHash(defaultCrypto.NewHash(), data)
+			},
 			// aes 使用AES算法(CBC)进行加解密
-			"aes": &Aes{crypto: &cmCrypto},
+			"aes": &Aes{crypto: cmCrypto},
 			// sm4 使用SM4算法进行加解密
-			"sm4": &Aes{crypto: &gmCrypto},
+			"sm4": &Aes{crypto: gmCrypto},
+			// symmetric 根据配置使用使用AES或SM4算法进行加解密（默认为AES）
+			"symmetric": &Aes{crypto: defaultCrypto},
 			// ecdsa 使用ECDSA算法进行签名或加解密
-			"ecdsa": &Ecdsa{crypto: &cmCrypto},
+			"ecdsa": &Ecdsa{crypto: cmCrypto},
 			// sm2 使用SM2算法进行签名或加解密
-			"sm2": &Ecdsa{crypto: &gmCrypto},
+			"sm2": &Ecdsa{crypto: gmCrypto},
+			// asymmetric 根据配置使用使用ECDSA或SM2算法进行加解密（默认为ECDSA）
+			"asymmetric": &Ecdsa{crypto: defaultCrypto},
 		},
 	})
+}
+
+type Hash struct {
+	hash hash.Hash
+}
+
+// Add 添加数据到Hash
+// Add data 字符串格式的数据
+// Add return Hash对象，方便串联操作
+func (hash *Hash) Add(data string) *Hash {
+	hash.hash.Write([]byte(data))
+	return hash
+}
+
+// AddHex 添加Hex编码的数据到Hash
+// AddHex data Hex编码的二进制数据
+// AddHex return Hash对象，方便串联操作
+func (hash *Hash) AddHex(data string) *Hash {
+	hash.hash.Write([]byte(data))
+	return hash
+}
+
+// AddBytes 添加二进制数据到Hash
+// AddBytes data 二进制数据
+// AddBytes return Hash对象，方便串联操作
+func (hash *Hash) AddBytes(p []byte) *Hash {
+	hash.hash.Write(p)
+	return hash
+}
+
+// Make 生成Hash
+// Make return Hex编码的结果
+func (hash *Hash) Make() string {
+	return hex.EncodeToString(hash.MakeBytes())
+}
+
+// MakeBytes 生成Hash
+// MakeBytes return 二进制结果
+func (hash *Hash) MakeBytes() []byte {
+	return hash.hash.Sum(nil)
 }
 
 type Aes struct {
@@ -160,7 +260,7 @@ type Aes struct {
 // Encrypt key hex编码的16位或32位密钥
 // Encrypt iv hex编码的16位或32位向量
 // Encrypt return 返回hex编码的加密结果
-func (ae *Aes)Encrypt(data, key, iv string) (string, error) {
+func (ae *Aes) Encrypt(data, key, iv string) (string, error) {
 	if keyD, err1 := hex.DecodeString(key); err1 == nil {
 		if ivD, err2 := hex.DecodeString(iv); err2 == nil {
 			return makeHexStringResult(cmCrypto.Encrypt([]byte(data), keyD, ivD))
@@ -171,20 +271,22 @@ func (ae *Aes)Encrypt(data, key, iv string) (string, error) {
 		return "", err1
 	}
 }
+
 // EncryptBytes 将二进制数据加密
 // EncryptBytes data 用于加密的数据，二进制的字节数组
 // EncryptBytes key 二进制的16位或32位密钥
 // EncryptBytes iv 二进制的16位或32位向量
 // EncryptBytes return 返回二进制的加密结果
-func (ae *Aes)EncryptBytes(data, key, iv []byte) ([]byte, error) {
+func (ae *Aes) EncryptBytes(data, key, iv []byte) ([]byte, error) {
 	return cmCrypto.Encrypt(data, key, iv)
 }
+
 // Decrypt 解密为字符串
 // Decrypt data hex编码的加密后结果
 // Decrypt key hex编码的16位或32位密钥
 // Decrypt iv hex编码的16位或32位向量
 // Decrypt return 解密后的数据，string类型
-func (ae *Aes)Decrypt(data string, key, iv string) (string, error) {
+func (ae *Aes) Decrypt(data string, key, iv string) (string, error) {
 	if keyD, err1 := hex.DecodeString(key); err1 == nil {
 		if ivD, err2 := hex.DecodeString(iv); err2 == nil {
 			if dataD, err3 := hex.DecodeString(data); err3 == nil {
@@ -205,10 +307,9 @@ func (ae *Aes)Decrypt(data string, key, iv string) (string, error) {
 // DecryptBytes key 二进制的16位或32位密钥
 // DecryptBytes iv 二进制的16位或32位向量
 // DecryptBytes return 解密后的数据，二进制的字节数组
-func (ae *Aes)DecryptBytes(data, key, iv []byte) ([]byte, error) {
+func (ae *Aes) DecryptBytes(data, key, iv []byte) ([]byte, error) {
 	return cmCrypto.Decrypt(data, key, iv)
 }
-
 
 type Ecdsa struct {
 	crypto crypt.Crypt

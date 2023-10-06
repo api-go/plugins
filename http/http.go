@@ -1,7 +1,7 @@
 package http
 
 import (
-	"github.com/api0-work/plugin"
+	"github.com/api-go/plugin"
 	"github.com/ssgo/httpclient"
 	"github.com/ssgo/log"
 	"github.com/ssgo/u"
@@ -22,7 +22,7 @@ var defaultClient = Client{
 
 func init() {
 	plugin.Register(plugin.Plugin{
-		Id:   "github.com/api0-work/plugins/http",
+		Id:   "github.com/api-go/plugins/http",
 		Name: "http",
 		Objects: map[string]interface{}{
 			"new":              NewHTTP,
@@ -75,8 +75,8 @@ func (c *Client) Delete(logger *log.Logger, url string, body interface{}, header
 }
 
 // Head 发送HEAD请求
-func (c *Client) Head(logger *log.Logger, url string, body interface{}, headers *map[string]string) (map[string]interface{}, error) {
-	return makeResult(logger, c.pool.Head(c.makeURL(url), body, c.makeHeaderArray(headers)...))
+func (c *Client) Head(logger *log.Logger, url string, headers *map[string]string) (map[string]interface{}, error) {
+	return makeResult(logger, c.pool.Head(c.makeURL(url), c.makeHeaderArray(headers)...))
 }
 
 func makeResult(logger *log.Logger, result *httpclient.Result) (map[string]interface{}, error) {
