@@ -20,8 +20,8 @@ type DiscoverApp struct {
 
 func init() {
 	plugin.Register(plugin.Plugin{
-		Id:   "github.com/api-go/plugins/discover",
-		Name: "discover",
+		Id:   "discover",
+		Name: "服务发现",
 		Objects: map[string]interface{}{
 			"fetch": GetDiscoverApp,
 		},

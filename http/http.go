@@ -22,8 +22,8 @@ var defaultClient = Client{
 
 func init() {
 	plugin.Register(plugin.Plugin{
-		Id:   "github.com/api-go/plugins/http",
-		Name: "http",
+		Id:   "http",
+		Name: "HTTP客户端",
 		Objects: map[string]interface{}{
 			"new":              NewHTTP,
 			"newH2C":           NewH2CHTTP,

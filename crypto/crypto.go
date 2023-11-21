@@ -21,8 +21,8 @@ var defaultCryptoLock = sync.RWMutex{}
 
 func init() {
 	plugin.Register(plugin.Plugin{
-		Id:   "github.com/api-go/plugins/crypto",
-		Name: "crypto",
+		Id:   "crypto",
+		Name: "加密算法",
 		ConfigSet: []plugin.ConfigSet{
 			{Name: "mode", Type: "string", Memo: "指定默认算法集，cm-通用算法（SHA256、AES、ECDSA），gm-国密算法（sm3、sm4、sm2）"},
 		},

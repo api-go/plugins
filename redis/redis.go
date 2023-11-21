@@ -2,7 +2,6 @@ package redis
 
 import (
 	"encoding/json"
-	"fmt"
 	"github.com/api-go/plugin"
 	"github.com/ssgo/log"
 	"github.com/ssgo/redis"
@@ -18,8 +17,8 @@ var defaultRedis *redis.Redis
 
 func init() {
 	plugin.Register(plugin.Plugin{
-		Id:   "github.com/api-go/plugins/redis",
-		Name: "redis",
+		Id:   "redis",
+		Name: "Redis客户端",
 		ConfigSet: []plugin.ConfigSet{
 			{Name: "default", Type: "string", Memo: "默认的Redis连接，使用 redis.get() 来获得实例，格式为 redis://127.0.0.1:6379/1 或 redis://:<**加密的密码**>@127.0.0.1:6379?timeout=10s&logSlow=100ms"},
 			{Name: "configs", Type: "map[string]string", Memo: "其他Redis连接，使用 redis.get('name') 来获得实例"},
@@ -39,6 +38,11 @@ func init() {
 		Objects: map[string]interface{}{
 			"fetch": GetRedis,
 		},
+		// 实现直接使用redis.xxx操作默认的Redis
+		JsCode: `let _redis = redis
+redis = _redis.fetch()
+redis.fetch = _redis.fetch
+`,
 	})
 }
 
@@ -52,7 +56,6 @@ func GetRedis(name *string, logger *log.Logger) *Redis {
 		}
 	} else {
 		if redisPool[*name] != nil {
-			fmt.Println(u.JsonP(redisPool[*name].Config), 999)
 			return &Redis{pool: redisPool[*name].CopyByLogger(logger)}
 		} else if defaultRedis != nil {
 			return &Redis{pool: defaultRedis.CopyByLogger(logger)}

@@ -5,13 +5,17 @@ import (
 	"errors"
 	"github.com/api-go/plugin"
 	"github.com/ssgo/u"
+	"gopkg.in/yaml.v3"
 	"os"
+	"path"
+	"runtime"
+	"sort"
 	"strings"
 	"sync"
 )
 
-var allowPaths = make([]string, 0)
-var allowExtensions = make([]string, 0)
+var _allowPaths = make([]string, 0)
+var _allowExtensions = make([]string, 0)
 var notAllowMessage = ""
 var fileConfigLock = sync.RWMutex{}
 
@@ -22,106 +26,223 @@ type File struct {
 	name string
 	fd   *os.File
 }
+type FileInfo struct {
+	Name  string
+	Mtime int64
+	IsDir bool
+	Size  int64
+}
 
 func init() {
 	plugin.Register(plugin.Plugin{
-		Id:   "github.com/api-go/plugins/file",
-		Name: "file",
+		Id:   "file",
+		Name: "文件操作",
 		ConfigSet: []plugin.ConfigSet{
-			{Name: "allowPaths", Type: "[]string", Memo: "允许操作的文件路径"},
-			{Name: "allowExtensions", Type: "[]string", Memo: "允许操作的文件后缀，以.开头，例如 .json .txt .db"},
+			{Name: "_allowPaths", Type: "[]string", Memo: "允许操作的文件路径"},
+			{Name: "_allowExtensions", Type: "[]string", Memo: "允许操作的文件后缀，以.开头，例如 .json .txt .db"},
 			{Name: "notAllowMessage", Type: "string", Memo: "当文件路径或文件后缀不被允许时返回的错误信息"},
 		},
 		Init: func(conf map[string]interface{}) {
 			newAllowPaths := make([]string, 0)
 			newAllowExtensions := make([]string, 0)
 			newNotAllowMessage := "file not allow to access"
-			if conf["allowPaths"] != nil {
-				u.Convert(conf["allowPaths"], &newAllowPaths)
+			if conf["_allowPaths"] != nil {
+				u.Convert(conf["_allowPaths"], &newAllowPaths)
 			}
-			if conf["allowExtensions"] != nil {
-				u.Convert(conf["allowExtensions"], &newAllowExtensions)
+			if conf["_allowExtensions"] != nil {
+				u.Convert(conf["_allowExtensions"], &newAllowExtensions)
 			}
 			if conf["notAllowMessage"] != nil {
 				newNotAllowMessage = u.String(conf["notAllowMessage"])
 			}
 			fileConfigLock.Lock()
-			allowPaths = newAllowPaths
-			allowExtensions = newAllowExtensions
+			_allowPaths = newAllowPaths
+			_allowExtensions = newAllowExtensions
 			notAllowMessage = newNotAllowMessage
 			fileConfigLock.Unlock()
 		},
 		Objects: map[string]interface{}{
+			// list 列出目录下的文件
+			// * dirname 目录名称
+			// list sortBy 排序依据[name|mtime|size]，默认使用名称排序
+			// list limit 返回指定数量，默认返回全部
+			// list return 文件列表{name:文件名,mtime:最后修改时间,size:文件尺寸}
+			"list": func(dirname string, sortBy *string, limit *int) ([]FileInfo, error) {
+				dirname = fixPath(dirname)
+				if !checkDirAllow(dirname) {
+					return nil, errors.New(getNotAllowMessage())
+				}
+				u.CheckPath(path.Join(dirname, "_"))
+
+				if d, err := os.Open(dirname); err == nil {
+					out := make([]FileInfo, 0)
+					if files, err := d.Readdir(-1); err == nil {
+						for _, f := range files {
+							if !strings.HasPrefix(f.Name(), ".") {
+								out = append(out, FileInfo{
+									Name:  f.Name(),
+									Mtime: f.ModTime().Unix(),
+									IsDir: f.IsDir(),
+									Size:  f.Size(),
+								})
+							}
+						}
+					}
+					_ = d.Close()
+					if sortBy != nil {
+						sort.Slice(out, func(i, j int) bool {
+							if *sortBy == "mtime" {
+								return out[i].Mtime > out[j].Mtime
+							} else if *sortBy == "size" {
+								return out[i].Size > out[j].Size
+							} else {
+								return out[i].Name < out[j].Name
+							}
+						})
+					}
+					if limit != nil && *limit > 0 && *limit < len(out) {
+						return out[0:*limit], nil
+					}
+					return out, nil
+				} else {
+					return []FileInfo{}, err
+				}
+			},
+			// exists 判断文件是否存在
+			// exists return 是否存在
+			"exists": func(filename string) bool {
+				fi, err := os.Stat(filename)
+				return err == nil && fi != nil
+			},
+			// isDir 判断是否文件夹
+			// isDir return 是否文件夹
+			"isDir": func(filename string) (bool, error) {
+				filename = fixPath(filename)
+				if fi, err := getFileStat(filename); err == nil {
+					return fi.IsDir(), nil
+				} else {
+					return false, err
+				}
+			},
+			// getModTime 返回文件的修改时间（时间戳格式）
+			// getModTime return 修改时间的时间戳
+			"getModTime": func(filename string) (int64, error) {
+				filename = fixPath(filename)
+				if fi, err := getFileStat(filename); err == nil {
+					return fi.ModTime().Unix(), nil
+				} else {
+					return 0, err
+				}
+			},
+			// getModTimeStr 返回文件的修改时间（字符串格式）
+			// getModTimeStr return 修改时间的字符串
+			"getModTimeStr": func(filename string) (string, error) {
+				filename = fixPath(filename)
+				if fi, err := getFileStat(filename); err == nil {
+					return fi.ModTime().Format("2006-01-02 15:04:05"), nil
+				} else {
+					return "", err
+				}
+			},
+			// makeDir 创建文件夹
+			"makeDir": func(dirname string) error {
+				dirname = fixPath(dirname)
+				if !checkDirAllow(dirname) {
+					return errors.New(getNotAllowMessage())
+				}
+				return os.MkdirAll(dirname, 0700)
+			},
 			// read 读取一个文件
-			// * fileName 文件名
+			// * filename 文件名
 			// read return 文件内容，字符串格式
-			"read": func(fileName string) (string, error) {
-				if f, err := openFileForRead(fileName); err == nil {
+			"read": func(filename string) (string, error) {
+				filename = fixPath(filename)
+				if f, err := openFileForRead(filename); err == nil {
 					defer f.Close()
 					return f.ReadAll()
-				}else{
+				} else {
 					return "", err
 				}
 			},
 			// readBytes 读取一个二进制文件
 			// readBytes return 文件内容，二进制格式
-			"readBytes": func(fileName string) ([]byte, error) {
-				if f, err := openFileForRead(fileName); err == nil {
+			"readBytes": func(filename string) ([]byte, error) {
+				filename = fixPath(filename)
+				if f, err := openFileForRead(filename); err == nil {
 					defer f.Close()
 					return f.ReadAllBytes()
-				}else{
+				} else {
 					return nil, err
 				}
 			},
 			// readFileLines 按行读取文件
 			// readFileLines return 文件内容，返回字符串数组
-			"readFileLines": func(fileName string) ([]string, error) {
-				if f, err := openFileForRead(fileName); err == nil {
+			"readFileLines": func(filename string) ([]string, error) {
+				filename = fixPath(filename)
+				if f, err := openFileForRead(filename); err == nil {
 					defer f.Close()
 					return f.ReadLines()
-				}else{
+				} else {
 					return nil, err
 				}
 			},
 			// write 写入一个文件
 			// write content 文件内容，字符串格式
 			// write return 写入的字节数
-			"write": func(fileName, content string) (int, error) {
-				if f, err := openFileForWrite(fileName); err == nil {
+			"write": func(filename, content string) (int, error) {
+				filename = fixPath(filename)
+				if f, err := openFileForWrite(filename); err == nil {
 					defer f.Close()
 					return f.Write(content)
-				}else{
+				} else {
 					return 0, err
 				}
 			},
 			// writeBytes 写入一个二进制文件
 			// writeBytes content 文件内容，二进制格式
 			// writeBytes return 写入的字节数
-			"writeBytes": func(fileName string, content []byte) (int, error) {
-				if f, err := openFileForWrite(fileName); err == nil {
+			"writeBytes": func(filename string, content []byte) (int, error) {
+				filename = fixPath(filename)
+				if f, err := openFileForWrite(filename); err == nil {
 					defer f.Close()
 					return f.WriteBytes(content)
-				}else{
+				} else {
 					return 0, err
 				}
 			},
-			"openForRead": openFileForRead,
-			"openForWrite": openFileForWrite,
+			"openForRead":   openFileForRead,
+			"openForWrite":  openFileForWrite,
 			"openForAppend": openFileForAppend,
-			"open": openFile,
+			"open":          openFile,
 			// remove 删除文件
-			"remove": func(fileName string) error {
-				if !checkFileAllow(fileName) {
-					return errors.New(getNotAllowMessage())
+			"remove": func(filename string) error {
+				filename = fixPath(filename)
+				fi, err := getFileStat(filename)
+				if err == nil && fi.IsDir() {
+					if !checkDirAllow(filename) {
+						return errors.New(getNotAllowMessage())
+					}
+					return os.RemoveAll(filename)
+				} else {
+					if !checkFileAllow(filename) {
+						return errors.New(getNotAllowMessage())
+					}
+					return os.Remove(filename)
 				}
-				return os.Remove(fileName)
 			},
 			// rename 修改文件名
 			// * fileOldName 旧文件
 			// * fileNewName 新文件
 			"rename": func(fileOldName, fileNewName string) error {
-				if !checkFileAllow(fileOldName) || !checkFileAllow(fileNewName) {
-					return errors.New(getNotAllowMessage())
+				fi, err := getFileStat(fileOldName)
+				if err == nil && fi.IsDir() {
+					if !checkDirAllow(fileOldName) || !checkDirAllow(fileNewName) {
+						return errors.New(getNotAllowMessage())
+					}
+				} else {
+					if !checkFileAllow(fileOldName) || !checkFileAllow(fileNewName) {
+						return errors.New(getNotAllowMessage())
+					}
 				}
 				return os.Rename(fileOldName, fileNewName)
 			},
@@ -137,77 +258,105 @@ func init() {
 				}
 			},
 			// saveJson 将对象存储为JSON格式的文件
-			"saveJson": func(fileName string, content interface{}) error {
-				if !checkFileAllow(fileName) {
+			"saveJson": func(filename string, content interface{}) error {
+				filename = fixPath(filename)
+				if !checkFileAllow(filename) {
 					return errors.New(getNotAllowMessage())
 				}
-				return u.SaveJsonP(fileName, content)
+				return u.SaveJsonP(filename, content)
 			},
 			// saveYaml 将对象存储为YAML格式的文件
-			"saveYaml": func(fileName string, content interface{}) error {
-				if !checkFileAllow(fileName) {
+			"saveYaml": func(filename string, content interface{}) error {
+				filename = fixPath(filename)
+				if !checkFileAllow(filename) {
 					return errors.New(getNotAllowMessage())
 				}
-				return u.SaveYaml(fileName, content)
+				return u.SaveYaml(filename, content)
 			},
 			// loadJson 读取JSON格式的文件并转化为对象
 			// loadJson return 对象
-			"loadJson": func(fileName string) (interface{}, error) {
-				if !checkFileAllow(fileName) {
+			"loadJson": func(filename string) (interface{}, error) {
+				filename = fixPath(filename)
+				if !checkFileAllow(filename) {
 					return nil, errors.New(getNotAllowMessage())
 				}
 				var data interface{}
-				err := u.LoadJson(fileName, &data)
+				err := u.LoadJson(filename, &data)
 				return data, err
 			},
 			// loadYaml 读取YAML格式的文件并转化为对象
 			// loadYaml return 对象
-			"loadYaml": func(fileName string) (interface{}, error) {
-				if !checkFileAllow(fileName) {
+			"loadYaml": func(filename string) (interface{}, error) {
+				filename = fixPath(filename)
+				if !checkFileAllow(filename) {
 					return nil, errors.New(getNotAllowMessage())
 				}
 				var data interface{}
-				err := u.LoadYaml(fileName, &data)
+				buf, err := u.ReadFileBytes(filename)
+				if err == nil {
+					err = yaml.Unmarshal(buf, &data)
+				}
 				return data, err
 			},
 		},
 	})
 }
 
+func fixPath(filename string) string {
+	if runtime.GOOS == "windows" {
+		return strings.ReplaceAll(filename, "/", "\\")
+	}
+	return filename
+}
+
+func getFileStat(filename string) (os.FileInfo, error) {
+	fi, err := os.Stat(filename)
+	if err == nil && fi.IsDir() {
+		if !checkDirAllow(filename) {
+			return nil, errors.New(getNotAllowMessage())
+		}
+	} else {
+		if !checkFileAllow(filename) {
+			return nil, errors.New(getNotAllowMessage())
+		}
+	}
+	return fi, err
+}
+
 // openFileForRead 打开一个用于读取的文件，若不存在会抛出异常
 // openFileForRead return 文件对象，请务必在使用完成后关闭文件
-func openFileForRead(fileName string) (*File, error) {
-	return _openFile(fileName, os.O_RDONLY, 0400)
+func openFileForRead(filename string) (*File, error) {
+	return _openFile(filename, os.O_RDONLY, 0400)
 }
 
 // openFileForWrite 打开一个用于写入的文件，若不存在会自动创建
 // openFileForWrite return 文件对象，请务必在使用完成后关闭文件
-func openFileForWrite(fileName string) (*File, error) {
-	return _openFile(fileName, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0600)
+func openFileForWrite(filename string) (*File, error) {
+	return _openFile(filename, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0600)
 }
 
 // openFileForAppend 打开一个用于追加写入的文件，若不存在会自动创建
 // openFileForAppend return 文件对象，请务必在使用完成后关闭文件
-func openFileForAppend(fileName string) (*File, error) {
-	return _openFile(fileName, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0600)
+func openFileForAppend(filename string) (*File, error) {
+	return _openFile(filename, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0600)
 }
 
 // openFile 打开一个用于追加写入的文件，若不存在会自动创建
 // openFile return 文件对象，请务必在使用完成后关闭文件
-func openFile(fileName string) (*File, error) {
-	return _openFile(fileName, os.O_CREATE|os.O_RDWR|os.O_SYNC, 0600)
+func openFile(filename string) (*File, error) {
+	return _openFile(filename, os.O_CREATE|os.O_RDWR|os.O_SYNC, 0600)
 }
-func _openFile(fileName string, flag int, perm os.FileMode) (*File, error) {
-	if !checkFileAllow(fileName) {
+func _openFile(filename string, flag int, perm os.FileMode) (*File, error) {
+	if !checkFileAllow(filename) {
 		return nil, errors.New(getNotAllowMessage())
 	}
-	u.CheckPath(fileName)
-	fd, err := os.OpenFile(fileName, flag, perm)
+	u.CheckPath(filename)
+	fd, err := os.OpenFile(filename, flag, perm)
 	if err != nil {
 		return nil, err
 	}
 	lockFile(fd)
-	return &File{name: fileName, fd: fd}, nil
+	return &File{name: filename, fd: fd}, nil
 }
 
 // Close 关闭文件
@@ -306,9 +455,28 @@ func getNotAllowMessage() string {
 	return notAllowMessage
 }
 
-func checkFileAllow(filename string) bool {
+func getAllowPaths() []string {
 	fileConfigLock.RLock()
 	defer fileConfigLock.RUnlock()
+	allowPaths := make([]string, len(_allowPaths))
+	for i, v := range _allowPaths {
+		allowPaths[i] = v
+	}
+	return allowPaths
+}
+
+func getAllowExtensions() []string {
+	fileConfigLock.RLock()
+	defer fileConfigLock.RUnlock()
+	allowExtensions := make([]string, len(_allowExtensions))
+	for i, v := range _allowPaths {
+		allowExtensions[i] = v
+	}
+	return allowExtensions
+}
+
+func checkDirAllow(filename string) bool {
+	allowPaths := getAllowPaths()
 	if len(allowPaths) > 0 {
 		ok := false
 		for _, allowPath := range allowPaths {
@@ -321,6 +489,15 @@ func checkFileAllow(filename string) bool {
 			return false
 		}
 	}
+	return true
+}
+
+func checkFileAllow(filename string) bool {
+	if !checkDirAllow(filename) {
+		return false
+	}
+
+	allowExtensions := getAllowExtensions()
 	if len(allowExtensions) > 0 {
 		ok := false
 		for _, allowExtension := range allowExtensions {

@@ -21,8 +21,8 @@ var defaultDB *db.DB
 
 func init() {
 	plugin.Register(plugin.Plugin{
-		Id:   "github.com/api-go/plugins/db",
-		Name: "db",
+		Id:   "db",
+		Name: "数据库操作",
 		ConfigSet: []plugin.ConfigSet{
 			{Name: "default", Type: "string", Memo: "默认的DB连接，使用 db.get() 来获得实例，格式为 db://127.0.0.1:3306/1 或 db://root:<**加密的密码**>@127.0.0.1:3306?maxIdles=0&maxLifeTime=0&maxOpens=0&logSlow=1s"},
 			{Name: "configs", Type: "map[string]string", Memo: "其他DB连接，使用 db.get('name') 来获得实例"},
@@ -42,6 +42,11 @@ func init() {
 		Objects: map[string]interface{}{
 			"fetch": GetDB,
 		},
+		// 实现直接使用db.xxx操作默认的数据库
+		JsCode: `_db = db
+db = _db.fetch()
+db.fetch = _db.fetch
+`,
 	})
 }
 
