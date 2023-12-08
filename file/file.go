@@ -248,13 +248,30 @@ func init() {
 			},
 			// copy 复制文件
 			"copy": func(fileOldName, fileNewName string) error {
-				if !checkFileAllow(fileOldName) || !checkFileAllow(fileNewName) {
-					return errors.New(getNotAllowMessage())
-				}
-				if buf, err := u.ReadFileBytes(fileOldName); err == nil {
-					return u.WriteFileBytes(fileNewName, buf)
+				fileNewName = fixPath(fileNewName)
+				newFI, _ := getFileStat(fileNewName)
+				fileOldName = fixPath(fileOldName)
+				fi, err := getFileStat(fileOldName)
+				if err == nil && fi.IsDir() {
+					if !checkDirAllow(fileOldName) || !checkDirAllow(fileNewName) {
+						return errors.New(getNotAllowMessage())
+					}
+					//if strings.HasSuffix(fileNewName, "/") {
+					//	u.CheckPath(path.Join(fileNewName, "a.txt"))
+					//}else{
+					//	u.CheckPath(fileNewName)
+					//}
+					//_, err = u.RunCommand("cp", "-rf", fileOldName, fileNewName)
+					//return err
+					return copyDir(fileNewName, fileOldName)
 				} else {
-					return err
+					if !checkFileAllow(fileOldName) || !checkFileAllow(fileNewName) {
+						return errors.New(getNotAllowMessage())
+					}
+					if newFI != nil && newFI.IsDir() {
+						fileNewName = path.Join(fileNewName, path.Base(fileOldName))
+					}
+					return copyFile(fileNewName, fileOldName)
 				}
 			},
 			// saveJson 将对象存储为JSON格式的文件
@@ -300,6 +317,49 @@ func init() {
 			},
 		},
 	})
+}
+
+func copyDir(dst, src string) error{
+	if d, err := os.Open(src); err == nil {
+		defer d.Close()
+		if files, err := d.Readdir(-1); err == nil {
+			for _, f := range files {
+				if f.IsDir() {
+					if err2 := copyDir(path.Join(dst, f.Name()), path.Join(src, f.Name())); err2 != nil {
+						return err2
+					}
+				}else{
+					if err2 := copyFile(path.Join(dst, f.Name()), path.Join(src, f.Name())); err2 != nil {
+						return err2
+					}
+				}
+			}
+		}
+		return nil
+	} else {
+		return err
+	}
+}
+
+func copyFile(dst, src string) error{
+	if f, err := openFileForRead(src); err == nil {
+		defer f.Close()
+		if f2, err2 := openFileForWrite(dst); err == nil {
+			defer f2.Close()
+			for {
+				if buf, err3 := f.ReadBytes(10240); err3 != nil {
+					break
+				} else {
+					_, _ = f2.WriteBytes(buf)
+				}
+			}
+			return nil
+		} else {
+			return err2
+		}
+	} else {
+		return err
+	}
 }
 
 func fixPath(filename string) string {

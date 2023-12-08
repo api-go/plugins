@@ -21,19 +21,22 @@ var defaultClient = Client{
 }
 
 func init() {
+	defaultClient.pool.EnableRedirect()
 	plugin.Register(plugin.Plugin{
 		Id:   "http",
 		Name: "HTTP客户端",
 		Objects: map[string]interface{}{
-			"new":              NewHTTP,
-			"newH2C":           NewH2CHTTP,
-			"setBaseURL":       defaultClient.SetBaseURL,
-			"SetGlobalHeaders": defaultClient.SetGlobalHeaders,
-			"get":              defaultClient.Get,
-			"post":             defaultClient.Post,
-			"put":              defaultClient.Put,
-			"delete":           defaultClient.Delete,
-			"head":             defaultClient.Head,
+			"new":                   NewHTTP,
+			"newH2C":                NewH2CHTTP,
+			"newWithoutRedirect":    NewHTTPWithoutRedirect,
+			"newH2CWithoutRedirect": NewH2CHTTPWithoutRedirect,
+			"setBaseURL":            defaultClient.SetBaseURL,
+			"SetGlobalHeaders":      defaultClient.SetGlobalHeaders,
+			"get":                   defaultClient.Get,
+			"post":                  defaultClient.Post,
+			"put":                   defaultClient.Put,
+			"delete":                defaultClient.Delete,
+			"head":                  defaultClient.Head,
 		},
 	})
 }
@@ -137,19 +140,44 @@ func (c *Client) makeHeaderArray(in *map[string]string) []string {
 
 // NewHTTP 创建新的HTTP客户端
 // * timeout 请求的超时时间，单位(毫秒)
-// NewHTTP return HTTP客户端对象，支持的方法：get、post、put、delete、head、setBaseURL、setGlobalHeaders
+// NewHTTP return HTTP客户端对象
 func NewHTTP(timeout int) *Client {
+	pool := httpclient.GetClient(time.Duration(timeout) * time.Second)
+	pool.EnableRedirect()
 	return &Client{
-		pool:          httpclient.GetClient(time.Duration(timeout) * time.Second),
+		pool:          pool,
 		globalHeaders: map[string]string{},
 	}
 }
 
-// NewH2CHTTP 创建新的H2C客户端，timeout单位为毫秒
-// NewH2CHTTP return H2C客户端对象，支持的方法：get、post、put、delete、head、setBaseURL、setGlobalHeaders
-func NewH2CHTTP(timeout int) *Client {
+// NewHTTPWithoutRedirect 创建新的HTTP客户端（不自动跟踪301和302跳转）
+// * timeout 请求的超时时间，单位(毫秒)
+// NewHTTPWithoutRedirect return HTTP客户端对象
+func NewHTTPWithoutRedirect(timeout int) *Client {
+	pool := httpclient.GetClient(time.Duration(timeout) * time.Second)
 	return &Client{
-		pool:          httpclient.GetClientH2C(time.Duration(timeout) * time.Second),
+		pool:          pool,
+		globalHeaders: map[string]string{},
+	}
+}
+
+// NewH2CHTTP 创建新的H2C客户端
+// NewH2CHTTP return H2C客户端对象
+func NewH2CHTTP(timeout int) *Client {
+	pool := httpclient.GetClientH2C(time.Duration(timeout) * time.Second)
+	pool.EnableRedirect()
+	return &Client{
+		pool:          pool,
+		globalHeaders: map[string]string{},
+	}
+}
+
+// NewH2CHTTPWithoutRedirect 创建新的H2C客户端（不自动跟踪301和302跳转）
+// NewH2CHTTPWithoutRedirect return H2C客户端对象
+func NewH2CHTTPWithoutRedirect(timeout int) *Client {
+	pool := httpclient.GetClientH2C(time.Duration(timeout) * time.Second)
+	return &Client{
+		pool:          pool,
 		globalHeaders: map[string]string{},
 	}
 }
