@@ -19,10 +19,10 @@ func init() {
 	plugin.Register(plugin.Plugin{
 		Id:   "redis",
 		Name: "Redis客户端",
-		ConfigSet: []plugin.ConfigSet{
-			{Name: "default", Type: "string", Memo: "默认的Redis连接，使用 redis.get() 来获得实例，格式为 redis://127.0.0.1:6379/1 或 redis://:<**加密的密码**>@127.0.0.1:6379?timeout=10s&logSlow=100ms"},
-			{Name: "configs", Type: "map[string]string", Memo: "其他Redis连接，使用 redis.get('name') 来获得实例"},
-		},
+		ConfigSample: `default: redis://:<**encrypted_password**>@127.0.0.1:6379/1?timeout=10s&logSlow=100ms # set default redis connection pool, used by redis.xxx
+configs:
+  conn1: redis://127.0.0.1:6379/12 # set a named connection pool, used by redis.get('conn1').xxx
+`,
 		Init: func(conf map[string]interface{}) {
 			if conf["default"] != nil {
 				defaultRedis = redis.GetRedis(u.String(conf["default"]), nil)

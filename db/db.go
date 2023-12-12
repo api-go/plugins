@@ -23,10 +23,13 @@ func init() {
 	plugin.Register(plugin.Plugin{
 		Id:   "db",
 		Name: "数据库操作",
-		ConfigSet: []plugin.ConfigSet{
-			{Name: "default", Type: "string", Memo: "默认的DB连接，使用 db.get() 来获得实例，格式为 db://127.0.0.1:3306/1 或 db://root:<**加密的密码**>@127.0.0.1:3306?maxIdles=0&maxLifeTime=0&maxOpens=0&logSlow=1s"},
-			{Name: "configs", Type: "map[string]string", Memo: "其他DB连接，使用 db.get('name') 来获得实例"},
-		},
+		ConfigSample: `default: mysql://root:<**encrypted_password**>@127.0.0.1:3306/1?maxIdles=0&maxLifeTime=0&maxOpens=0&logSlow=1s # set default db connection pool, used by db.xxx
+configs:
+  conn1: sqlite3://conn1.db # set a named connection pool, used by db.get('conn1').xxx
+  conn2: mysql://root:@127.0.0.1:3306/1?sslCa=<**encrypted**>&sslCert=<**encrypted**>&sslKey=<**encrypted**>&sslSkipVerify=true # set ssl connection pool for mysql
+  conn3: mysql://root:@127.0.0.1:3306/1?timeout=90s&readTimeout=5s&writeTimeout=3s&charset=utf8mb4,utf8 # set more option for mysql
+`,
+
 		Init: func(conf map[string]interface{}) {
 			if conf["default"] != nil {
 				defaultDB = db.GetDB(u.String(conf["default"]), nil)

@@ -37,20 +37,22 @@ func init() {
 	plugin.Register(plugin.Plugin{
 		Id:   "file",
 		Name: "文件操作",
-		ConfigSet: []plugin.ConfigSet{
-			{Name: "_allowPaths", Type: "[]string", Memo: "允许操作的文件路径"},
-			{Name: "_allowExtensions", Type: "[]string", Memo: "允许操作的文件后缀，以.开头，例如 .json .txt .db"},
-			{Name: "notAllowMessage", Type: "string", Memo: "当文件路径或文件后缀不被允许时返回的错误信息"},
-		},
+		ConfigSample: `allowPaths: # 允许操作的文件路径
+  - /
+allowExtensions: # 允许操作的文件后缀，以.开头，例如 .json .txt .db
+  - .json
+  - .txt
+notAllowMessage: no access for file # 当文件路径或文件后缀不被允许时返回的错误信息
+`,
 		Init: func(conf map[string]interface{}) {
 			newAllowPaths := make([]string, 0)
 			newAllowExtensions := make([]string, 0)
 			newNotAllowMessage := "file not allow to access"
-			if conf["_allowPaths"] != nil {
-				u.Convert(conf["_allowPaths"], &newAllowPaths)
+			if conf["allowPaths"] != nil {
+				u.Convert(conf["allowPaths"], &newAllowPaths)
 			}
-			if conf["_allowExtensions"] != nil {
-				u.Convert(conf["_allowExtensions"], &newAllowExtensions)
+			if conf["allowExtensions"] != nil {
+				u.Convert(conf["allowExtensions"], &newAllowExtensions)
 			}
 			if conf["notAllowMessage"] != nil {
 				newNotAllowMessage = u.String(conf["notAllowMessage"])
