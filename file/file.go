@@ -72,7 +72,7 @@ notAllowMessage: no access for file # 当文件路径或文件后缀不被允许
 			"list": func(dirname string, sortBy *string, limit *int) ([]FileInfo, error) {
 				dirname = fixPath(dirname)
 				if !checkDirAllow(dirname) {
-					return nil, errors.New(getNotAllowMessage())
+					return nil, errors.New(getNotAllowMessage(dirname))
 				}
 				u.CheckPath(path.Join(dirname, "_"))
 
@@ -150,7 +150,7 @@ notAllowMessage: no access for file # 当文件路径或文件后缀不被允许
 			"makeDir": func(dirname string) error {
 				dirname = fixPath(dirname)
 				if !checkDirAllow(dirname) {
-					return errors.New(getNotAllowMessage())
+					return errors.New(getNotAllowMessage(dirname))
 				}
 				return os.MkdirAll(dirname, 0700)
 			},
@@ -222,12 +222,12 @@ notAllowMessage: no access for file # 当文件路径或文件后缀不被允许
 				fi, err := getFileStat(filename)
 				if err == nil && fi.IsDir() {
 					if !checkDirAllow(filename) {
-						return errors.New(getNotAllowMessage())
+						return errors.New(getNotAllowMessage(filename))
 					}
 					return os.RemoveAll(filename)
 				} else {
 					if !checkFileAllow(filename) {
-						return errors.New(getNotAllowMessage())
+						return errors.New(getNotAllowMessage(filename))
 					}
 					return os.Remove(filename)
 				}
@@ -238,12 +238,18 @@ notAllowMessage: no access for file # 当文件路径或文件后缀不被允许
 			"rename": func(fileOldName, fileNewName string) error {
 				fi, err := getFileStat(fileOldName)
 				if err == nil && fi.IsDir() {
-					if !checkDirAllow(fileOldName) || !checkDirAllow(fileNewName) {
-						return errors.New(getNotAllowMessage())
+					if !checkDirAllow(fileOldName) {
+						return errors.New(getNotAllowMessage(fileOldName))
+					}
+					if !checkDirAllow(fileNewName) {
+						return errors.New(getNotAllowMessage(fileNewName))
 					}
 				} else {
-					if !checkFileAllow(fileOldName) || !checkFileAllow(fileNewName) {
-						return errors.New(getNotAllowMessage())
+					if !checkFileAllow(fileOldName) {
+						return errors.New(getNotAllowMessage(fileOldName))
+					}
+					if !checkFileAllow(fileNewName) {
+						return errors.New(getNotAllowMessage(fileNewName))
 					}
 				}
 				return os.Rename(fileOldName, fileNewName)
@@ -255,8 +261,11 @@ notAllowMessage: no access for file # 当文件路径或文件后缀不被允许
 				fileOldName = fixPath(fileOldName)
 				fi, err := getFileStat(fileOldName)
 				if err == nil && fi.IsDir() {
-					if !checkDirAllow(fileOldName) || !checkDirAllow(fileNewName) {
-						return errors.New(getNotAllowMessage())
+					if !checkDirAllow(fileOldName) {
+						return errors.New(getNotAllowMessage(fileOldName))
+					}
+					if !checkDirAllow(fileNewName) {
+						return errors.New(getNotAllowMessage(fileNewName))
 					}
 					//if strings.HasSuffix(fileNewName, "/") {
 					//	u.CheckPath(path.Join(fileNewName, "a.txt"))
@@ -267,8 +276,11 @@ notAllowMessage: no access for file # 当文件路径或文件后缀不被允许
 					//return err
 					return copyDir(fileNewName, fileOldName)
 				} else {
-					if !checkFileAllow(fileOldName) || !checkFileAllow(fileNewName) {
-						return errors.New(getNotAllowMessage())
+					if !checkFileAllow(fileOldName) {
+						return errors.New(getNotAllowMessage(fileOldName))
+					}
+					if !checkFileAllow(fileNewName) {
+						return errors.New(getNotAllowMessage(fileNewName))
 					}
 					if newFI != nil && newFI.IsDir() {
 						fileNewName = path.Join(fileNewName, path.Base(fileOldName))
@@ -277,18 +289,20 @@ notAllowMessage: no access for file # 当文件路径或文件后缀不被允许
 				}
 			},
 			// saveJson 将对象存储为JSON格式的文件
+			// saveJson content 要存储的对象
 			"saveJson": func(filename string, content interface{}) error {
 				filename = fixPath(filename)
 				if !checkFileAllow(filename) {
-					return errors.New(getNotAllowMessage())
+					return errors.New(getNotAllowMessage(filename))
 				}
 				return u.SaveJsonP(filename, content)
 			},
 			// saveYaml 将对象存储为YAML格式的文件
+			// saveYaml content 要存储的对象
 			"saveYaml": func(filename string, content interface{}) error {
 				filename = fixPath(filename)
 				if !checkFileAllow(filename) {
-					return errors.New(getNotAllowMessage())
+					return errors.New(getNotAllowMessage(filename))
 				}
 				return u.SaveYaml(filename, content)
 			},
@@ -297,7 +311,7 @@ notAllowMessage: no access for file # 当文件路径或文件后缀不被允许
 			"loadJson": func(filename string) (interface{}, error) {
 				filename = fixPath(filename)
 				if !checkFileAllow(filename) {
-					return nil, errors.New(getNotAllowMessage())
+					return nil, errors.New(getNotAllowMessage(filename))
 				}
 				var data interface{}
 				err := u.LoadJson(filename, &data)
@@ -308,7 +322,7 @@ notAllowMessage: no access for file # 当文件路径或文件后缀不被允许
 			"loadYaml": func(filename string) (interface{}, error) {
 				filename = fixPath(filename)
 				if !checkFileAllow(filename) {
-					return nil, errors.New(getNotAllowMessage())
+					return nil, errors.New(getNotAllowMessage(filename))
 				}
 				var data interface{}
 				buf, err := u.ReadFileBytes(filename)
@@ -321,7 +335,7 @@ notAllowMessage: no access for file # 当文件路径或文件后缀不被允许
 	})
 }
 
-func copyDir(dst, src string) error{
+func copyDir(dst, src string) error {
 	if d, err := os.Open(src); err == nil {
 		defer d.Close()
 		if files, err := d.Readdir(-1); err == nil {
@@ -330,7 +344,7 @@ func copyDir(dst, src string) error{
 					if err2 := copyDir(path.Join(dst, f.Name()), path.Join(src, f.Name())); err2 != nil {
 						return err2
 					}
-				}else{
+				} else {
 					if err2 := copyFile(path.Join(dst, f.Name()), path.Join(src, f.Name())); err2 != nil {
 						return err2
 					}
@@ -343,7 +357,7 @@ func copyDir(dst, src string) error{
 	}
 }
 
-func copyFile(dst, src string) error{
+func copyFile(dst, src string) error {
 	if f, err := openFileForRead(src); err == nil {
 		defer f.Close()
 		if f2, err2 := openFileForWrite(dst); err == nil {
@@ -375,11 +389,11 @@ func getFileStat(filename string) (os.FileInfo, error) {
 	fi, err := os.Stat(filename)
 	if err == nil && fi.IsDir() {
 		if !checkDirAllow(filename) {
-			return nil, errors.New(getNotAllowMessage())
+			return nil, errors.New(getNotAllowMessage(filename))
 		}
 	} else {
 		if !checkFileAllow(filename) {
-			return nil, errors.New(getNotAllowMessage())
+			return nil, errors.New(getNotAllowMessage(filename))
 		}
 	}
 	return fi, err
@@ -410,7 +424,7 @@ func openFile(filename string) (*File, error) {
 }
 func _openFile(filename string, flag int, perm os.FileMode) (*File, error) {
 	if !checkFileAllow(filename) {
-		return nil, errors.New(getNotAllowMessage())
+		return nil, errors.New(getNotAllowMessage(filename))
 	}
 	u.CheckPath(filename)
 	fd, err := os.OpenFile(filename, flag, perm)
@@ -511,10 +525,10 @@ func (f *File) Seek(offset int64) error {
 	return err
 }
 
-func getNotAllowMessage() string {
+func getNotAllowMessage(filename string) string {
 	fileConfigLock.RLock()
 	defer fileConfigLock.RUnlock()
-	return notAllowMessage
+	return notAllowMessage + ": " + filename
 }
 
 func getAllowPaths() []string {

@@ -4,6 +4,7 @@ import (
 	"encoding/hex"
 	"github.com/api-go/plugin"
 	"github.com/ssgo/u"
+	"gopkg.in/yaml.v3"
 )
 
 func init() {
@@ -333,6 +334,22 @@ util.copy = function (obj, isDeepCopy) {
 				} else {
 					return u.Id6()
 				}
+			},
+
+			// encodeYaml 将对象转换为YAML格式
+			// encodeYaml content 对象
+			// encodeYaml return YAML字符串
+			"encodeYaml": func(content interface{}) (string, error) {
+				buf, err := yaml.Marshal(content)
+				return string(buf), err
+			},
+			// decodeYaml 将YAML转化为对象
+			// decodeYaml content YAML字符串
+			// decodeYaml return 对象
+			"decodeYaml": func(content string) (interface{}, error) {
+				var data interface{}
+				err := yaml.Unmarshal([]byte(content), &data)
+				return data, err
 			},
 		},
 	})
